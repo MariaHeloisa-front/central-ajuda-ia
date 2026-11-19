@@ -59,13 +59,19 @@ npm run dev
 npx supabase login
 npx supabase link --project-ref <ref-do-projeto>
 npx supabase db push                                   # cria tabelas e RLS
-npx supabase secrets set ANTHROPIC_API_KEY=<sua-chave>
+npx supabase secrets set ANTHROPIC_API_KEY=<sua-chave>   # opcional, veja "Modo de teste"
 npx supabase functions deploy ask --no-verify-jwt      # pública: o cliente não faz login
 ```
 
+### Modo de teste (sem chave da IA)
+
+Se o secret `ANTHROPIC_API_KEY` não estiver definido, a função `ask` não chama a IA: ela escolhe o artigo mais parecido com a pergunta por palavras-chave (sem acentos, ignorando palavras comuns; título pesa mais que conteúdo) e devolve o **conteúdo do artigo** com `simulated: true`. A página mostra o selo *"Resposta simulada (modo de teste, sem IA)"*. Se nenhum artigo combinar, devolve a mensagem padrão de "fale com um atendente" e registra a pergunta em *Perguntas sem resposta*, igual ao modo com IA. Para ligar a IA depois, basta `npx supabase secrets set ANTHROPIC_API_KEY=...` (não precisa publicar a função de novo).
+
 Artigos de exemplo: rode o conteúdo de `supabase/seed.sql` no SQL Editor do painel.
 
-**Usuários do time:** no painel, *Authentication → Users → Add user* (e-mail e senha). Não há cadastro público. Recomenda-se desativar *Allow new users to sign up* em *Authentication → Sign In / Providers*.
+**Usuários do time:** no painel, *Authentication → Users → Add user* (e-mail e senha). Não há cadastro público.
+
+> **Importante:** desative *Allow new users to sign up* em *Authentication → Sign In / Providers*. As políticas de RLS liberam os artigos para qualquer usuário autenticado; com o cadastro aberto (padrão do Supabase), qualquer pessoa com a anon key poderia criar uma conta e editar os artigos. (`supabase/config.toml` já vem com `enable_signup = false`, mas isso vale só para o ambiente local.)
 
 ## Testes
 

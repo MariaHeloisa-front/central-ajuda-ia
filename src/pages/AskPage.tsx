@@ -57,6 +57,9 @@ export default function AskPage() {
 
       {result && (
         <section className="card answer" aria-live="polite">
+          {result.simulated && (
+            <p className="badge">Resposta simulada (modo de teste, sem IA)</p>
+          )}
           <p className="answer-text">{result.answer}</p>
           {result.article ? (
             <p className="source">Fonte: {result.article.title}</p>

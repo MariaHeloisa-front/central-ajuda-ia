@@ -7,7 +7,12 @@ export const MAX_QUESTION_LENGTH = 500
 
 export type ArticleLite = { id: string; title: string; content: string }
 
-export type AskResult = { answer: string; article: { id: string; title: string } | null }
+export type AskResult = {
+  answer: string
+  article: { id: string; title: string } | null
+  /** true quando a resposta veio do modo de teste (sem IA). */
+  simulated?: boolean
+}
 
 export function validateQuestion(
   raw: unknown,
@@ -43,7 +48,67 @@ REGRAS OBRIGATÓRIAS:
 ARTIGOS:
 ${docs}`
 
-  return { system, user: `<pergunta>${question}</pergunta>` }
+  // Neutraliza < e > para a pergunta não conseguir fechar a tag e "sair" da delimitação.
+  const safeQuestion = question.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return { system, user: `<pergunta>${safeQuestion}</pergunta>` }
+}
+
+// ---- Modo de teste (sem ANTHROPIC_API_KEY): busca simples por palavras-chave ----
+
+const STOPWORDS = new Set(
+  (
+    'a o as os um uma uns umas de da do das dos em no na nos nas ao aos por pelo pela para pra com sem ' +
+    'e ou mas se que como qual quais quando onde porque quem eu voce voces ele ela nos meu minha meus minhas ' +
+    'seu sua seus suas esse essa isso este esta isto aquilo ta tah sao ser estar tem ter tenho faco fazer ' +
+    'muito mais menos quero queria posso pode preciso gostaria ja nao sim aqui la oi ola bom boa dia tarde noite ' +
+    'obrigado obrigada favor algum alguma'
+  ).split(' '),
+)
+
+function keywords(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z0-9]+/)
+    .map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w)) // plural simples
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w))
+  return new Set(words)
+}
+
+/**
+ * Escolhe o artigo mais parecido com a pergunta. Cada palavra-chave da pergunta vale 2 pontos
+ * se aparece no título e 1 se aparece só no conteúdo. Exige pelo menos 2 pontos e que metade
+ * das palavras-chave da pergunta apareça no artigo; senão devolve null (sem cobertura).
+ */
+export function matchArticleByKeywords(articles: ArticleLite[], question: string): ArticleLite | null {
+  const q = keywords(question)
+  if (q.size === 0) return null
+
+  let best: { article: ArticleLite; score: number; matched: number } | null = null
+  for (const article of articles) {
+    const title = keywords(article.title)
+    const content = keywords(article.content)
+    let score = 0
+    let matched = 0
+    for (const w of q) {
+      if (title.has(w)) score += 2
+      else if (content.has(w)) score += 1
+      else continue
+      matched++
+    }
+    if (!best || score > best.score) best = { article, score, matched }
+  }
+
+  if (!best || best.score < 2 || best.matched / q.size < 0.5) return null
+  return best.article
+}
+
+export function simulatedAnswer(articles: ArticleLite[], question: string): AskResult {
+  const article = matchArticleByKeywords(articles, question)
+  return article
+    ? { answer: article.content, article: { id: article.id, title: article.title }, simulated: true }
+    : { answer: FALLBACK_ANSWER, article: null, simulated: true }
 }
 
 const FALLBACK: AskResult = { answer: FALLBACK_ANSWER, article: null }

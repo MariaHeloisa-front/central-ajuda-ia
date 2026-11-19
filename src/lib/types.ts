@@ -16,4 +16,6 @@ export interface UnansweredQuestion {
 export interface AskResponse {
   answer: string
   article: { id: string; title: string } | null
+  /** true quando a função está em modo de teste (sem chave da IA). */
+  simulated?: boolean
 }

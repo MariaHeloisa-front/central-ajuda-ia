@@ -1,12 +1,14 @@
 // Edge Function `ask` — recebe a pergunta do cliente e responde com base nos artigos.
 // A chave do LLM fica apenas no secret ANTHROPIC_API_KEY (nunca no front).
-import Anthropic from 'npm:@anthropic-ai/sdk'
-import { createClient } from 'npm:@supabase/supabase-js@2'
+// Sem ANTHROPIC_API_KEY, roda em modo de teste: escolhe o artigo por palavras-chave (sem IA).
+import Anthropic from 'npm:@anthropic-ai/sdk@1.10.0'
+import { createClient } from 'npm:@supabase/supabase-js@2.119.1'
 import {
   FALLBACK_ANSWER,
   buildPrompt,
   parseModelOutput,
   shouldSkipModel,
+  simulatedAnswer,
   validateQuestion,
   type ArticleLite,
   type AskResult,
@@ -31,9 +33,11 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
-const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
+const anthropic = apiKey ? new Anthropic({ apiKey }) : null
+if (!anthropic) console.warn('ANTHROPIC_API_KEY não definida: função `ask` em modo de teste (respostas simuladas).')
 
-async function askModel(articles: ArticleLite[], question: string): Promise<AskResult> {
+async function askModel(anthropic: Anthropic, articles: ArticleLite[], question: string): Promise<AskResult> {
   const { system, user } = buildPrompt(articles, question)
   const response = await anthropic.beta.messages.create({
     model: MODEL,
@@ -86,9 +90,11 @@ Deno.serve(async (req) => {
     if (error) throw error
     const articles = (data ?? []) as ArticleLite[]
 
-    const result = shouldSkipModel(articles)
-      ? { answer: FALLBACK_ANSWER, article: null }
-      : await askModel(articles, question)
+    const result: AskResult = !anthropic
+      ? simulatedAnswer(articles, question)
+      : shouldSkipModel(articles)
+        ? { answer: FALLBACK_ANSWER, article: null }
+        : await askModel(anthropic, articles, question)
 
     if (result.article === null) {
       const { error: insertError } = await supabase

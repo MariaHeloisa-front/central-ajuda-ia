@@ -65,4 +65,25 @@ describe('AskPage', () => {
     ).toBeInTheDocument()
     expect(button).toBeEnabled()
   })
+
+  it('marca a resposta simulada (modo de teste)', async () => {
+    askMock.mockResolvedValue({
+      answer: 'Conteúdo do artigo.',
+      article: { id: 'a1', title: 'Como emitir a segunda via do boleto' },
+      simulated: true,
+    })
+    const { input, button } = setup()
+    await userEvent.type(input, 'segunda via do boleto')
+    await userEvent.click(button)
+    expect(await screen.findByText(/Resposta simulada/)).toBeInTheDocument()
+  })
+
+  it('não mostra o aviso de simulação em respostas reais', async () => {
+    askMock.mockResolvedValue({ answer: 'Ok.', article: { id: 'a1', title: 'Boleto' } })
+    const { input, button } = setup()
+    await userEvent.type(input, 'boleto')
+    await userEvent.click(button)
+    await screen.findByText('Ok.')
+    expect(screen.queryByText(/Resposta simulada/)).not.toBeInTheDocument()
+  })
 })
